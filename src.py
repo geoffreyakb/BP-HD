@@ -511,6 +511,8 @@ def INVDT_PLOT(r_vtk, r_min, r_max, theta_vtk, phi_vtk, quantities, zoom, list_p
     plt.close()
     list_plots.append(f"./output/plots/{plots_name}.png")
 
-
 def KEPLER(r_vtk):
     return np.sqrt(1/r_vtk**3)
+
+def EINSTEIN(r_vtk):
+    return np.sqrt(1/r_vtk**3 + 6/r_vtk**4)

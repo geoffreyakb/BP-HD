@@ -190,7 +190,6 @@ Setup::Setup(Input &input, Grid &grid, DataBlock &data, Output &output) {
 void Setup::InitFlow(DataBlock &data) {
     DataBlockHost d(data);
     real epsilon = epsilonGlob;
-    real tilt = tiltGlob * M_PI / 180;
     GravityPotential gravity = gravityGlob;
 
     real r, th;
