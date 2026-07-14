@@ -54,7 +54,14 @@ void InternalBoundary(Hydro *hydro, const real t) {
                 0, data->np_tot[IDIR],
                 KOKKOS_LAMBDA (int k, int j, int i) {
                     if(Vc(RHO,k,j,i) < densityFloor) {
+                        real px1 = Vc(VX1,k,j,i) * Vc(RHO,k,j,i);
+                        real px2 = Vc(VX2,k,j,i) * Vc(RHO,k,j,i);
+                        real px3 = Vc(VX3,k,j,i) * Vc(RHO,k,j,i);
+
                         Vc(RHO,k,j,i) = densityFloor;
+                        Vc(VX1,k,j,i) = px1/densityFloor;
+                        Vc(VX2,k,j,i) = px2/densityFloor;
+                        Vc(VX3,k,j,i) = px3/densityFloor;
                     }
                 });
 }
@@ -151,7 +158,7 @@ void CoarsenFunction(DataBlock &data) {
     idefix_for("set_coarsening", 0, data.np_tot[JDIR], 0, data.np_tot[IDIR],
                 KOKKOS_LAMBDA(int j, int i) {
                     int c = 1.0 / std::abs(sin(th(j)));
-                    if(c > 6) c = 6;
+                    if(c > 3) c = 3;
                     coarseningLevel(j,i) = c;
                 });
 }
