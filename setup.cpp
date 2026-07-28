@@ -1,6 +1,7 @@
 #include "idefix.hpp"
 #include "setup.hpp"
 #include "analysis.hpp"
+#include "dataBlock.hpp"
 
 real epsilonGlob;
 real alphaGlob;
@@ -66,7 +67,7 @@ void InternalBoundary(Hydro *hydro, const real t) {
                 });
 }
 
-void GravitomagneticTerm(Hydro *hydro, const real t, const real dtin) {
+void GravitomagneticTerm(Hydro *hydro, const real t, real dtin) {
     auto *data = hydro->data;
     IdefixArray4D<real> Vc = hydro->Vc;
     IdefixArray4D<real> Uc = hydro->Uc;
@@ -74,6 +75,7 @@ void GravitomagneticTerm(Hydro *hydro, const real t, const real dtin) {
     IdefixArray1D<real> x2 = data->x[JDIR];
     IdefixArray1D<real> x3 = data->x[KDIR];
     real dt = dtin;
+    IdefixArray3D<real> InvDt = hydro->InvDt;
 
     real spin = spinGlob;
     real tilt = tiltGlob * M_PI / 180;
@@ -106,10 +108,16 @@ void GravitomagneticTerm(Hydro *hydro, const real t, const real dtin) {
             real Vcrossh_th = Vphi*hr - Vr*hphi;
             real Vcrossh_phi = Vr*hth - Vth*hr;
 
+            // Gravitomagnetic term
             Uc(MX1,k,j,i) += dt * Vc(RHO,k,j,i) * Vcrossh_r;
             Uc(MX2,k,j,i) += dt * Vc(RHO,k,j,i) * Vcrossh_th;
             Uc(MX3,k,j,i) += dt * Vc(RHO,k,j,i) * Vcrossh_phi;
-
+            // Constraining the time step for the next integration cycle
+            real grav_InvDt = sqrt(pow(hr, 2) + pow(hth, 2) + pow(hphi, 2));
+            if (grav_InvDt > InvDt(k,j,i)) {
+                InvDt(k,j,i) = grav_InvDt;
+            }
+            // Damping poloidal motions in the densityFloor zone
             real q = Vc(RHO,k,j,i) / densityFloor;
             real fact = 1/(1+exp(q*q)); // Smoothly goes to 0 for q>>1 and to 1 for q<<1
             Uc(MX1,k,j,i) -= dt * 10*fact * Vc(RHO,k,j,i) * Vc(VX1,k,j,i);
@@ -141,12 +149,51 @@ void ComputeUserVars(DataBlock & data, UserDefVariablesContainer &variables) {
     IdefixArray3D<real>::HostMirror scrhHost = Kokkos::create_mirror_view(scrh);
     Kokkos::deep_copy(scrhHost,scrh);
 
-    IdefixHostArray3D<real> InvDt  = variables["InvDt"];
+    IdefixHostArray3D<real> InvDt = variables["InvDt"];
+    IdefixHostArray3D<real> Vperp = variables["Vperp"];
+    IdefixHostArray3D<real> vCrosshx1 = variables["vCrosshx1"];
+    IdefixHostArray3D<real> vCrosshx2 = variables["vCrosshx2"];
+    IdefixHostArray3D<real> vCrosshx3 = variables["vCrosshx3"];
+
+    GravityPotential gravity = gravityGlob;
+    real spin = spinGlob;
+    real beta_0 = tiltGlob * M_PI / 180;
+    // -tilt so that the initial precession is zero
+    real Sx = spin * sin(-beta_0);
+    real Sy = ZERO_F;
+    real Sz = spin * cos(-beta_0);
 
     for(int k = d.beg[KDIR]; k < d.end[KDIR] ; k++) {
         for(int j = d.beg[JDIR]; j < d.end[JDIR] ; j++) {
             for(int i = d.beg[IDIR]; i < d.end[IDIR] ; i++) {
+                real r = d.x[IDIR](i);
+                real th = d.x[JDIR](j);
+                real phi = d.x[KDIR](k);
+
                 InvDt(k,j,i) = d.InvDt(k,j,i);
+                
+                real grad_Phi;
+                switch (gravity) {
+                    case GravityPotential::Kepler:
+                        grad_Phi = 1/pow(r,2);
+                    break;
+                    case GravityPotential::Einstein:
+                        grad_Phi = 1/pow(r,2) + 6/pow(r,3);
+                    break;
+                }
+                real VK = sqrt(r * grad_Phi);
+                Vperp(k,j,i) = sqrt(pow(d.Vc(VX2,k,j,i), 2) + pow(d.Vc(VX3,k,j,i), 2)) / VK;
+
+                real Sr = sin(th)*cos(phi)*Sx + sin(th)*sin(phi)*Sy + cos(th)*Sz;
+                real Sth = cos(th)*cos(phi)*Sx + cos(th)*sin(phi)*Sy - sin(th)*Sz;
+                real Sphi = - sin(phi)*Sx + cos(phi)*Sy;
+                real hr = -4*Sr / pow(r,3);
+                real hth = 2*Sth / pow(r,3);
+                real hphi = 2*Sphi / pow(r,3);
+                // idfx::cout << "this point" << std::endl;
+                vCrosshx1(k,j,i) = d.Vc(VX2,k,j,i)*hphi - d.Vc(VX3,k,j,i)*hth;
+                vCrosshx2(k,j,i) = d.Vc(VX3,k,j,i)*hr - d.Vc(VX1,k,j,i)*hphi;
+                vCrosshx3(k,j,i) = d.Vc(VX1,k,j,i)*hth - d.Vc(VX2,k,j,i)*hr;
             }
         }
     }
@@ -198,6 +245,7 @@ void Setup::InitFlow(DataBlock &data) {
     DataBlockHost d(data);
     real epsilon = epsilonGlob;
     GravityPotential gravity = gravityGlob;
+    real densityFloor = densityFloorGlob;
 
     real r, th;
 
@@ -208,11 +256,15 @@ void Setup::InitFlow(DataBlock &data) {
                 th = d.x[JDIR](j);
 
                 real R = r*sin(th);
-                real z = r*cos(th);
-                real Vk = 1.0/sqrt(R);
-                real cs = epsilon/sqrt(R);
+                real cs = epsilon/sqrt(r);
 
-                d.Vc(RHO,k,j,i) = 1.0/(R * sqrt(R)) * exp(1.0/pow(cs,2) * (1/r - 1/R));
+                real rho = 1.0/(R * sqrt(R)) * exp(1.0/pow(cs,2) * (1/r - 1/R));
+                if (rho > densityFloor) {
+                    d.Vc(RHO,k,j,i) = rho;
+                }
+                else {
+                    d.Vc(RHO,k,j,i) = densityFloor;
+                }
                 d.Vc(VX1,k,j,i) = ZERO_F;
                 d.Vc(VX2,k,j,i) = ZERO_F;
 
