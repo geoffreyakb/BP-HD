@@ -236,8 +236,8 @@ Setup::Setup(Input &input, Grid &grid, DataBlock &data, Output &output) {
     analysis = new Analysis(input, grid, data);
     output.EnrollAnalysis(&AnalysisFunction);
     output.EnrollUserDefVariables(&ComputeUserVars);
-    if(data.haveGridCoarsening) {
-      data.EnrollGridCoarseningLevels(&CoarsenFunction);
+    if (data.haveGridCoarsening) {
+        data.EnrollGridCoarseningLevels(&CoarsenFunction);
     }
 }
 
