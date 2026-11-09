@@ -19,7 +19,7 @@ Analysis::Analysis(Input &input, Grid &grid, DataBlock &data) : grid(grid), gh(g
     data.dump->RegisterVariable(&countAverage, "analysis_count");
     this->precision = 10;
     this->column_width = 2*precision;
-    this->pathAnalysisFolder = "output/analysis/";
+    this->pathAnalysisFolder = "analysis/";
     // Radial averages (to update according to the number of radial profiles you want)
     this->radial_NVARS = 6;
     this->Sigma = 0;

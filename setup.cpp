@@ -146,7 +146,7 @@ void ComputeUserVars(DataBlock & data, UserDefVariablesContainer &variables) {
     d.SyncFromDevice();
 
     IdefixArray3D<real> scrh("Scratch", data.np_tot[KDIR], data.np_tot[JDIR], data.np_tot[IDIR]);
-    IdefixArray3D<real>::HostMirror scrhHost = Kokkos::create_mirror_view(scrh);
+    IdefixArray3D<real>::host_mirror_type scrhHost = Kokkos::create_mirror_view(scrh);
     Kokkos::deep_copy(scrhHost,scrh);
 
     IdefixHostArray3D<real> InvDt = variables["InvDt"];
