@@ -5,6 +5,7 @@
 
 real epsilonGlob;
 real alphaGlob;
+real rInGlob;
 real densityFloorGlob;
 enum GravityPotential {Kepler, Einstein};
 GravityPotential gravityGlob;
@@ -213,6 +214,7 @@ void CoarsenFunction(DataBlock &data) {
 Setup::Setup(Input &input, Grid &grid, DataBlock &data, Output &output) {
     epsilonGlob = input.Get<real>("Setup", "epsilon", 0);
     alphaGlob = input.Get<real>("Setup", "alpha", 0);
+    rInGlob = input.Get<real>("Grid", "X1-grid",1);
     densityFloorGlob = input.Get<real>("Setup", "densityFloor", 0);
     if (input.Get<std::string>("Setup", "gravity", 0) == "Kepler") gravityGlob = GravityPotential::Kepler;
     else if (input.Get<std::string>("Setup", "gravity", 0) == "Einstein") gravityGlob = GravityPotential::Einstein;
@@ -244,6 +246,7 @@ Setup::Setup(Input &input, Grid &grid, DataBlock &data, Output &output) {
 void Setup::InitFlow(DataBlock &data) {
     DataBlockHost d(data);
     real epsilon = epsilonGlob;
+    real rIn = rInGlob;
     GravityPotential gravity = gravityGlob;
     real densityFloor = densityFloorGlob;
 
@@ -258,7 +261,7 @@ void Setup::InitFlow(DataBlock &data) {
                 real R = r*sin(th);
                 real cs = epsilon/sqrt(r);
 
-                real rho = 1.0/(R * sqrt(R)) * exp(1.0/pow(cs,2) * (1/r - 1/R));
+                real rho = (rIn * sqrt(rIn))/(R * sqrt(R)) * exp(1.0/pow(cs,2) * (1/r - 1/R));
                 if (rho > densityFloor) {
                     d.Vc(RHO,k,j,i) = rho;
                 }
